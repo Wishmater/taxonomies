@@ -3,7 +3,12 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:downloads_path_provider/downloads_path_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxonomies/controllers/database_controller.dart';
 import 'package:taxonomies/controllers/migration_helper.dart';
 import 'package:taxonomies/notifiers/ads_notifier.dart';
@@ -13,16 +18,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:from_zero_ui/from_zero_ui.dart';
 import 'package:provider/provider.dart';
+import 'package:uni_links/uni_links.dart';
 import 'package:utf/utf.dart';
 import 'package:window_size/window_size.dart';
 import 'package:path/path.dart' as p;
 
 
-
-
-//    old method with --dart-define
-//const mode = String.fromEnvironment('MODE');
-//const propertiesPath = String.fromEnvironment('PROPERTIES_PATH');
 String? mode;
 String? propertiesPath;
 
@@ -33,15 +34,13 @@ late final IOSink logFileWrite;
 void main() async {
 
   // await Migration('C:/Workspaces/Flutter/taxonomies/assets_new/AvesEndemicasCuba/AvesEndemicasCuba.db',
-  //     'C:/Users/Dayan/Desktop/EDDY NOW/dbs/guatini_new.GS.db').migrate();
+  //     'C:/Users/Dayan/Desktop/EDDY NOW/dbs/guatini_new.db').migrate();
   // await Migration('C:/Workspaces/Flutter/taxonomies/assets_new/Murcielago/MurcielagosCubanos.db',
-  //     'C:/Users/Dayan/Desktop/EDDY NOW/dbs/murcielagos.GS.db').migrate();
+  //     'C:/Workspaces/Flutter/taxonomies/assets_Murcielago/main.db').migrate();
   // return;
 
-  await initHive();
   if (!kIsWeb && Platform.isWindows){
     File argsFile = File('args.txt');
-    print(argsFile.absolute.path);
     if (argsFile.existsSync()){
       var bytes = await argsFile.readAsBytes();
       var decoder = Utf16leBytesToCodeUnitsDecoder(bytes); // use le variant if no BOM
@@ -61,10 +60,7 @@ void main() async {
     }
   }
   if (!kIsWeb && Platform.isWindows && mode=='synch'){
-    await DatabaseController.init(
-      loadDb: false,
-      propertiesPath: propertiesPath,
-    );
+    await initHive('taxonomies');
     setWindowTitle("Sincronizando...");
     final maxSize = (await getCurrentScreen())!.frame;
     setWindowFrame(Rect.fromCenter(
@@ -81,7 +77,9 @@ void main() async {
       logFileWrite.writeln(details.stack.toString());
     };
     runZonedGuarded(
-          () async { runApp(LoadingApp()); },
+          () async {
+            runApp(LoadingApp());
+          },
           (dynamic error, StackTrace stackTrace) {
             logFileWrite.writeln(error.toString());
             logFileWrite.writeln(stackTrace.toString());
@@ -89,10 +87,9 @@ void main() async {
     );
   } else{
     MyFluroRouter.setupRouter();
-    await DatabaseController.init();
-    log("Database loaded successfully.");
-    runApp(MyApp());
-    if (kReleaseMode){
+    WidgetsFlutterBinding.ensureInitialized();
+    await initProject();
+    if (kReleaseMode && DatabaseController.logEnabled){
       try {
         String? path;
         if (Platform.isWindows){
@@ -100,10 +97,11 @@ void main() async {
               .replaceAll('%20', ' ');
           path = p.join(scriptPath, 'log.txt');
         } else if (Platform.isAndroid){
-          // if (await Permission.storage.request().isGranted){
-          //   path = p.join((await DownloadsPathProvider.downloadsDirectory).absolute.path, 'cutrans_crm_log.txt');
-          // }
+          if (await Permission.storage.request().isGranted){
+            path = p.join((await DownloadsPathProvider.downloadsDirectory).absolute.path, 'multimedia_log.txt');
+          }
         }
+        print (path);
         if (path!=null){
           File logFile = File(path)..createSync(recursive: true);
           logFileWrite = logFile.openWrite();
@@ -122,8 +120,9 @@ void main() async {
         } else{
           runApp(MyApp());
         }
-      } catch (_, __){
-        //TODO ??? how to report that I can't report ???
+      } catch (e, st){
+        print (e);
+        print(st);
         runApp(MyApp());
       }
     } else{
@@ -135,7 +134,52 @@ void main() async {
   }
 }
 
-class MyApp extends StatelessWidget {
+Future<void> initProject([String? module]) async {
+  if (PlatformExtended.isMobile) {
+    final sharedPreferences = await SharedPreferences.getInstance();
+    if (DatabaseController.currentlyInstalledTitle==null) {
+      await DatabaseController.init(loadDatabase: false);
+      String title = DatabaseController.config['title'] ?? 'tax_default';
+      DatabaseController.currentlyInstalledTitle = title;
+    }
+    List<String> availableModules = sharedPreferences.getStringList('modules') ?? [];
+    if (module==null) {
+      if (!availableModules.contains(DatabaseController.currentlyInstalledTitle)) {
+        module = DatabaseController.currentlyInstalledTitle;
+      } else {
+        module = sharedPreferences.getString('selectedModule') ?? DatabaseController.currentlyInstalledTitle;
+      }
+    } else {
+      sharedPreferences.setString('selectedModule', module);
+    }
+    await initHive('taxonomies');
+    await DatabaseController.init(
+        customAssetPathPrefix: PlatformExtended.isMobile && module!=DatabaseController.currentlyInstalledTitle
+            ? p.join((await getApplicationSupportDirectory()).absolute.path, module)
+            : null
+    );
+    DatabaseController.availableModules = availableModules;
+    print('Available Modules: ' + availableModules.toString());
+    print("Module '$module' loaded successfully.");
+  } else {
+    await initHive('taxonomies');
+    await DatabaseController.init();
+    DatabaseController.currentlyInstalledTitle = DatabaseController.config['title'] ?? 'tax_default';
+  }
+}
+
+final RouteObserver<Route> routeObserver = RouteObserver<Route>();
+
+class MyApp extends StatefulWidget {
+
+  @override
+  _MyAppState createState() => _MyAppState();
+
+}
+
+GlobalKey<NavigatorState> navigatorKey = GlobalKey();
+
+class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +188,8 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeParameters>(
         builder: (context, themeParameters, child) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
+            navigatorObservers: [routeObserver],
             title: DatabaseController.config['title'] ?? "Título",
             builder: (context, child) {
               return FromZeroAppContentWrapper(
@@ -189,7 +235,10 @@ class _LoadingAppState extends State<LoadingApp> {
   void initState() {
     super.initState();
     WidgetsBinding.instance!.addPostFrameCallback((timeStamp) async {
-      await Future.delayed(Duration(seconds: 1));
+      await DatabaseController.init(
+        useCustomDBPath: true,
+        propertiesPath: propertiesPath,
+      );
       DatabaseController.executeSynch(propertiesPath!).then((value) => exit(0));
     });
   }

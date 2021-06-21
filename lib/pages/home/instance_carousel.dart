@@ -83,9 +83,11 @@ class _CategoryInstancesCarouselState extends State<CategoryInstancesCarousel> {
               successBuilder: (context, List data) => NotificationListener(
                 onNotification: (notification) => true,
                 child: Scrollbar(
+                  controller: scrollController,
                   child: OpacityGradient(
                     direction: OpacityGradient.horizontal,
                     child: ListView.builder(
+                      controller: scrollController,
                       scrollDirection: Axis.horizontal,
                       itemCount: data.length,
                       padding: EdgeInsets.only(bottom: 12, left: 8, right: 8, top: 4),

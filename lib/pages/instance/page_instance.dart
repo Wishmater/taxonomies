@@ -14,7 +14,7 @@ import 'package:taxonomies/widgets/instance_embedded.dart';
 class PageInstance extends PageFromZero {
 
   @override
-  int get pageScaffoldDepth => 1;//depth;
+  int get pageScaffoldDepth => depth;
   @override
   String get pageScaffoldId => "home";
 
@@ -30,7 +30,7 @@ class PageInstance extends PageFromZero {
 
 class _PageViewState extends State<PageInstance> {
 
-  ScrollController mainScrollController = ScrollController();
+  late ScrollController mainScrollController;
   late Future<List<Instance>> parents;
   late Future<List<Instance>> sons;
 
@@ -48,10 +48,13 @@ class _PageViewState extends State<PageInstance> {
 
   @override
   Widget build(BuildContext context) {
+    mainScrollController = ScrollController();
     return BannerAdOverlay(
       child: ScaffoldFromZero(
         assumeTheScrollBarWillShowOnDesktop: true,
-        title: Stack(
+        title: widget.instance.name.isEmpty ?
+            Text(widget.instance.category.name)
+            : Stack(
           children: [
             Positioned(
               top: 6,
@@ -76,7 +79,7 @@ class _PageViewState extends State<PageInstance> {
         body: _getPage(context),
         currentPage: widget,
         mainScrollController: mainScrollController,
-        appbarType: kIsWeb||Platform.isIOS||Platform.isAndroid
+        appbarType: PlatformExtended.isMobile
             ? ScaffoldFromZero.appbarTypeQuickReturn : ScaffoldFromZero.appbarTypeStatic,
         actions: [
           AppbarAction(
@@ -132,14 +135,16 @@ class _PageViewState extends State<PageInstance> {
                     child: Column(
                       children: [
                         SizedBox(height: 2,),
-                        Center(
-                          child: Text(widget.instance.name, textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headline5!.copyWith(
-                              fontWeight: FontWeight.bold,
+                        if(widget.instance.name.isNotEmpty)
+                          Center(
+                            child: Text(widget.instance.name, textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.headline5!.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        SizedBox(height: 8,),
+                        if(widget.instance.name.isNotEmpty)
+                          SizedBox(height: 8,),
                         getAttributeColumn(widget.instance.firstAttributeColumn),
                         FutureBuilderFromZero(
                           future: parents,
@@ -208,7 +213,10 @@ class _PageViewState extends State<PageInstance> {
       children: List.generate(attributes.length, (index) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: AttributeWidget.factory(widget.instance, attributes[index]),
+          child: AttributeWidget.factory(
+            instance: widget.instance,
+            attribute: attributes[index],
+          ),
         );
       }),
     );

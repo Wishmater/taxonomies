@@ -1,39 +1,65 @@
-
-
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
-import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:hive/hive.dart';
 import 'package:moor/moor.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:taxonomies/controllers/game_model.dart';
 import 'package:taxonomies/main.dart';
+import 'package:taxonomies/models/attribute.dart';
 import 'database_impl.dart';
 import 'package:image/image.dart';
 
 abstract class DatabaseController{
 
-  static Map<String, dynamic> config = {};
-  static List<AdModel> bannerAds = [];
-  static List<AdModel> fullscreenAds = [];
-  static List<GameModel> games = [];
-  static List<String> homeCategories = [];
+  static String? customAssetPathPrefix;
+  static String? currentlyInstalledTitle;
+  static late Map<String, dynamic> config;
+  static late List<AdModel> bannerAds;
+  static late List<AdModel> fullscreenAds;
+  static late List<GameModel> games;
+  static late List<String> homeCategories;
+  static late List<String> searchableMapAttributeNames;
+  static late List<String> availableModules;
+  static bool get logEnabled => config['log']==null ? false : config['log'] as bool;
   static late LazyDatabase _db;
 
-  static Future<void> init({String? propertiesPath, bool loadDb=true}) async{
+  static Future<void> init({
+    String? customAssetPathPrefix,
+    String? propertiesPath,
+    bool useCustomDBPath=false,
+    bool loadDatabase=true,
+  }) async{
+    config = {};
+    bannerAds = [];
+    fullscreenAds = [];
+    games = [];
+    homeCategories = [];
+    searchableMapAttributeNames = [];
+    availableModules = [];
+    DatabaseController.customAssetPathPrefix = customAssetPathPrefix;
 //    String props = await rootBundle.loadString('assets/config.properties');
     var data; var list; var list2;
     if (propertiesPath==null){
-      var data = await rootBundle.load('assets/config.properties');
-      var buffer = data.buffer;
-      list = buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      if (customAssetPathPrefix==null) {
+        data = await rootBundle.load('assets/config.properties');
+        var buffer = data.buffer;
+        list = buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      } else {
+        list = File(p.join(customAssetPathPrefix, 'assets/config.properties')).readAsBytesSync();
+      }
       try {
-        var data2 = await rootBundle.load('assets/manual_config.properties');
-        var buffer2 = data2.buffer;
-        list2 = buffer2.asUint8List(data2.offsetInBytes, data2.lengthInBytes);
+        if (customAssetPathPrefix==null) {
+          var data2 = await rootBundle.load('assets/manual_config.properties');
+          var buffer2 = data2.buffer;
+          list2 = buffer2.asUint8List(data2.offsetInBytes, data2.lengthInBytes);
+        } else {
+          list2 = File(p.join(customAssetPathPrefix, 'assets/manual_config.properties')).readAsBytesSync();
+        }
       } catch (_){}
     } else{
       list = File(propertiesPath).readAsBytesSync();
@@ -52,6 +78,7 @@ abstract class DatabaseController{
     }
     List<AdModel> ads = [];
     List<String> props = LineSplitter.split(list).toList();
+    print (props);
     if (list2!=null) props.addAll(LineSplitter.split(list2));
     props.forEach((element) {
       if (element.startsWith("#")) return;
@@ -90,12 +117,18 @@ abstract class DatabaseController{
           var underscoreIndex = key.indexOf('_');
           index = int.parse(key.substring(4, underscoreIndex))-1;
           while(games.length<=index){
-            games.add(GameModel());
+            games.add(GameModel(games.length));
           }
           key = key.substring(underscoreIndex+1);
-          if (key.startsWith('target_attribute') || key.startsWith('hint_attribute')){
+          if (key=='audio_delay') {
+            print('audio_delay $value');
+            try { games[index].audioDelay = Duration(milliseconds: int.parse(value)); } catch(_) {}
+            print(games[index].audioDelay);
+          } else if (key.startsWith('target_attribute') || key.startsWith('hint_attribute') || key.startsWith('target_category') || key.startsWith('hint_category')){
             List<String> list = games[index].targetAttributes;
             if (key.startsWith('hint_attribute')) list = games[index].hintAttributes;
+            if (key.startsWith('target_category')) list = games[index].targetCategories;
+            if (key.startsWith('hint_category')) list = games[index].hintCategories;
             list.add(value);
           } else{
             switch(key){
@@ -108,11 +141,8 @@ abstract class DatabaseController{
               case 'type':
                 games[index].type = value;
                 break;
-              case 'target_category':
-                games[index].targetCategory = value;
-                break;
-              case 'hint_category':
-                games[index].hintCategory = value;
+              case 'icon':
+                games[index].icon = value;
                 break;
             }
           }
@@ -121,29 +151,47 @@ abstract class DatabaseController{
         }
       } catch(e){}
     });
-    ads.forEach((element) {
-      if (element.displayType=='Banner'){
-        bannerAds.add(element);
-      } else if (element.displayType=='Fullscreen'){
-        fullscreenAds.add(element);
+    if (loadDatabase) {
+      ads.forEach((element) {
+        if (element.displayType=='Banner'){
+          bannerAds.add(element);
+        } else if (element.displayType=='Fullscreen'){
+          fullscreenAds.add(element);
+        }
+      });
+      for (var i = 0; i < games.length; ++i) {
+        games[i] = GameModel.fromGameModel(games[i]);
+        await Hive.openBox('${DatabaseController.config['title'].hashCode}_Game${DatabaseController.games[i].id}');
       }
-    });
-    log(config.toString());
-    if (loadDb){
-      data = await rootBundle.load('assets/main.db');
-      Uint8List bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      searchableMapAttributeNames = [];
+      DatabaseController.config.keys.where((e) => e.startsWith('map_') && e.endsWith('_image')).forEach((e) {
+        searchableMapAttributeNames.add(e.substring(4, e.indexOf('_image')));
+      });
       if (kIsWeb) {
+        data = await rootBundle.load('assets/main.db');
+        Uint8List bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
         _db = LazyDatabase(()=>getPlatformDatabase(null, bytes));
-      } else{
-        Directory targetDirectory = await getApplicationSupportDirectory();
-        String path = p.join(targetDirectory.path, "${config['title']}.db");
-        // if ( FileSystemEntity.typeSync(path) == FileSystemEntityType.notFound // TODO in production, dont recopy db
-        //     || File(path).lengthSync()!=bytes.lengthInBytes){
+      } else {
+        String path;
+        if (useCustomDBPath) {
+          path = config['db_path'];
+          logFileWrite.writeln('Loading db at $path');
+        } else if (customAssetPathPrefix!=null) {
+          path = p.join(customAssetPathPrefix, 'assets/main.db');
+        } else {
+          data = await rootBundle.load('assets/main.db');
+          Uint8List bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+          Directory targetDirectory = await getApplicationSupportDirectory();
+          path = p.join(targetDirectory.path, "${config['title']}.db");
+          // if ( FileSystemEntity.typeSync(path) == FileSystemEntityType.notFound // TODO in production, dont recopy db
+          //     || File(path).lengthSync()!=bytes.lengthInBytes){
           await (File(path)..createSync(recursive: true)).writeAsBytes(bytes);
           log("Database copied to $path.");
-        // } else{
-        //   log("Database already found in $path.");
-        // }
+          // } else{
+          //   log("Database already found in $path.");
+          // }
+        }
+        log("Open Database on $path.");
         _db = LazyDatabase(()=>getPlatformDatabase(File(path), null));
       }
       await _db.ensureOpen(DatabaseUser());
@@ -233,6 +281,31 @@ abstract class DatabaseController{
     });
     logFileWrite.writeln('Windows icon integration process exit code: ' + (await icoIntegrationProcess.exitCode).toString());
     File(p.join(windowsFolderPath,'multi.exe')).deleteSync();
+    // TODO get images from all videos (can fail, leave an option for it in widget)
+    final videoAttributes = (await Attribute.getAll(sort: false)).where((e) => e.typeName=='Video').toList();
+    for (var i = 0; i < videoAttributes.length; ++i) {
+      String sourcePath = windowsFolderPath+'\\data\\flutter_assets\\assets\\'+videoAttributes[i].value;
+      Process videoImageProcess = await Process.start('app\\windows\\ffmpeg.exe'
+        , ['-i',
+          sourcePath,
+          '-ss',
+          '0',
+          '-f',
+          'image2',
+          '-frames:v',
+          '1',
+          sourcePath+'.jpg',
+        ],
+        workingDirectory: scriptPath.replaceAll('/', '\\'),
+      );
+      videoImageProcess.stdout.listen((event) {
+        logFileWrite.writeln(String.fromCharCodes(event));
+      });
+      videoImageProcess.stderr.listen((event) {
+        logFileWrite.writeln(String.fromCharCodes(event));
+      });
+      logFileWrite.writeln('Video thumbnail for ${videoAttributes[i].value} process exit code: ' + (await videoImageProcess.exitCode).toString());
+    }
     logFileWrite.writeln('Windows Synch Successful !!!! :)...');
 
     // extract images from .ico
@@ -257,7 +330,7 @@ abstract class DatabaseController{
       i--;
       iconImageFile = File(p.join(destinationFolderPath, 'logo-$i.png'),);
     } while (!iconImageFile.existsSync() && i>0);
-    Image iconImage = decodeImage(iconImageFile.readAsBytesSync());
+    Image iconImage = decodeImage(iconImageFile.readAsBytesSync())!;
 
     // COPY ANDROID FILES
     logFileWrite.writeln('Starting Android synch...');
@@ -281,15 +354,20 @@ abstract class DatabaseController{
     File manifest = File('app/android/AndroidManifest.xml');
     var xml = manifest.readAsStringSync();
     xml = xml.replaceAll('android:label="taxonomies"', 'android:label="$title"');
+    // String? customDeepLinkDomain = config['deepLinkDomain'];
+    // if (customDeepLinkDomain!=null) {
+    //   xml.replaceAll('android:host="tax.cujae.edu.cu"', 'android:host="$customDeepLinkDomain"');
+    // }
     manifest.deleteSync();
-    manifest.createSync();
-    manifest.writeAsString(xml);
+    File customManifest = File('app/android/AndroidManifest.xml.custom');
+    customManifest.createSync();
+    customManifest.writeAsString(xml);
     // encode manifest
     logFileWrite.writeln('Starting manifest encode process...');
     Process encodeProcess = await Process.start('java',
       ['-jar', 'app\\android\\xml2axml-1.1.0-SNAPSHOT.jar',
         'e',
-        'app/android/AndroidManifest.xml',
+        'app/android/AndroidManifest.xml.custom',
         p.join(androidExtraFolderPath,'AndroidManifest.xml'),
       ],
       workingDirectory: scriptPath.replaceAll('/', '\\'),
@@ -301,6 +379,7 @@ abstract class DatabaseController{
       logFileWrite.writeln(String.fromCharCodes(event));
     });
     logFileWrite.writeln('Manifest encode exit code: ' + (await encodeProcess.exitCode).toString());
+    customManifest.deleteSync();
     // update AssetManifest.json
     String assets = File('app/android/AssetManifest.json').readAsStringSync();
     assets = assets.substring(0, assets.length-1);
@@ -408,76 +487,4 @@ class AdModel {
   String? data;
   String? name;
   String? link;
-}
-
-class GameModel {
-  String? name;
-  String? description;
-  String? type;
-  String? targetCategory;
-  List<String> targetAttributes = [];
-  String? hintCategory;
-  List<String> hintAttributes = [];
-}
-
-class MyZipFileEncoder {
-  String? zip_path;
-  OutputFileStream? _output;
-  ZipEncoder? _encoder;
-
-  static const int STORE = 0;
-  static const int GZIP = 1;
-
-  void zipDirectory(Directory dir, {String? filename}) {
-    final dirPath = dir.path;
-    final zip_path = filename ?? '${dirPath}.zip';
-    create(zip_path);
-    addDirectory(dir, includeDirName: false);
-    close();
-  }
-
-  void open(String zip_path) => create(zip_path);
-
-  void create(String zip_path) {
-    this.zip_path = zip_path;
-
-    _output = OutputFileStream(zip_path);
-    _encoder = ZipEncoder();
-    _encoder!.startEncode(_output);
-  }
-
-  void addDirectory(Directory dir, {bool includeDirName = true}) {
-    List files = dir.listSync(recursive: true);
-    for (var file in files) {
-      if (file is! File) {
-        continue;
-      }
-
-      final f = file as File;
-      final dir_name = p.basename(dir.path);
-      final rel_path = p.relative(f.path, from: dir.path);
-      addFile(f, includeDirName ? (dir_name + '/' + rel_path) : rel_path);
-    }
-  }
-
-  void addFile(File file, [String? filename]) {
-    var file_stream = InputFileStream.file(file);
-    var f = ArchiveFile.stream(
-        filename ?? p.basename(file.path),
-        file.lengthSync(),
-        file_stream);
-
-    try{
-      f.lastModTime = file.lastModifiedSync().millisecondsSinceEpoch;
-    } catch(_){}
-    f.mode = file.statSync().mode;
-
-    _encoder!.addFile(f);
-    file_stream.close();
-  }
-
-  void close() {
-    try{ _encoder!.endEncode(); } catch(_){}
-    try{ _output!.close(); } catch(_){}
-  }
 }

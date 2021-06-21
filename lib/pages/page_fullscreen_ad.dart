@@ -21,15 +21,23 @@ class PageFullscreenAd extends PageFromZero {
 
 class _PageFullscreenAdState extends State<PageFullscreenAd> {
 
+  late AdModel adModel;
+
+  @override
+  void initState() {
+    super.initState();
+    final adsNotifier = Provider.of<AdsNotifier>(context, listen: false);
+    adModel = DatabaseController.fullscreenAds[adsNotifier.currentFullscreenAdIndex];
+    adsNotifier.increaseCurrentFullscreenAdIndex();
+  }
+
   @override
   Widget build(BuildContext context) {
-    var adsNotifier = Provider.of<AdsNotifier>(context, listen: false);
-    var adModel = DatabaseController.fullscreenAds[adsNotifier.currentFullscreenAdIndex];
-    adsNotifier.increaseCurrentFullscreenAdIndex();
     return ScaffoldFromZero(
       currentPage: widget,
       appbarType: ScaffoldFromZero.appbarTypeNone,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           AdContent(adModel),
           Positioned(
@@ -41,6 +49,7 @@ class _PageFullscreenAdState extends State<PageFullscreenAd> {
                 width: 42, height: 42,
                 child: IconButton(
                   icon: Icon(Icons.close),
+                  tooltip: 'Cerrar Publicidad',
                   onPressed: () {
                     Navigator.of(context).pop();
                   },

@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:from_zero_ui/from_zero_ui.dart';
+import 'package:taxonomies/controllers/database_controller.dart';
 import 'package:taxonomies/models/category.dart';
 import 'package:taxonomies/models/instance.dart';
 import 'package:taxonomies/router.dart';
+import 'package:path/path.dart' as p;
 
 
 class InstanceListTileCard extends StatelessWidget {
@@ -123,14 +127,21 @@ class _InstanceListTileState extends State<InstanceListTile> {
           future: imagePath,
           successBuilder: (context, String? data) {
             if (data==null) return Container();
-            Widget image = Image.asset("assets/"+data.replaceAll("\\", '/'), //TODO 2 better images
-              fit: BoxFit.contain,
-            );
-            if (heroActivated){
-              image = Hero(
-                tag: "image${widget.instance.id}-$data",
-                child: image,
+            Widget image;
+            if (DatabaseController.customAssetPathPrefix==null) {
+              image = Image.asset("assets/"+data.replaceAll("\\", '/'),
+                fit: BoxFit.contain,
               );
+            } else {
+              image = Image.file(File(p.join(DatabaseController.customAssetPathPrefix!, "assets/"+data.replaceAll("\\", '/'))),
+                fit: BoxFit.contain,
+              );
+            }
+            if (heroActivated){
+              // image = Hero(
+              //   tag: "image${widget.instance.id}-$data",
+              //   child: image,
+              // );
             }
             return image;
           },

@@ -10,7 +10,14 @@ class Attribute{
   Instance? link;
   bool prioritize;
 
-  Attribute({required this.typeId, required this.typeName, required this.attributeName, required this.value, this.link, this.prioritize=false});
+  Duration? audioDelay;
+
+  Attribute({required this.typeId, required this.typeName, required this.attributeName, required this.value, this.link, this.prioritize=false}) {
+    if (typeName=='Imagen' && value.endsWith('.mp4')) { // TODO remove this
+      typeId = -1;
+      typeName = 'Video';
+    }
+  }
 
   Attribute copyWith({
     int? typeId,
@@ -24,7 +31,7 @@ class Attribute{
       typeName: typeName ?? this.typeName,
       attributeName: attributeName ?? this.attributeName,
       value: value ?? this.value,
-      link: link,
+      link: link ?? this.link,
     );
   }
 
@@ -46,12 +53,13 @@ class Attribute{
       result = 8;
     } else if (typeName == "Video"){
       result = 7;
+    } else if (typeName == "Mapa"){
+      result = 6.5;
     }
     return result;
   }
 
   static Future<List<Attribute>> getAttributesFromArticle(int instance_id, {sort=true}) async{
-
     List<List<String>> result = [];
     try {
       result = await DatabaseController.executeQuery("select Type.type_id, type_name, attribute_name, value from Instance" +
@@ -64,7 +72,19 @@ class Attribute{
       print(e); print(st);
     }
     return getAttributesfromQueryResult(result, sort: sort);
+  }
 
+  static Future<List<Attribute>> getAll({sort=true}) async{
+    List<List<String>> result = [];
+    try {
+      result = await DatabaseController.executeQuery("select Type.type_id, type_name, attribute_name, value from Instance" +
+          " join Instance_Attribute on Instance.instance_id=Instance_Attribute.instance_id" +
+          " join Attribute on Instance_Attribute.attribute_id=Attribute.attribute_id" +
+          " join Type on Attribute.attribute_type_id=Type.type_id");
+    } catch (e, st) {
+      print(e); print(st);
+    }
+    return getAttributesfromQueryResult(result, sort: sort);
   }
 
   static List<Attribute> getAttributesfromQueryResult(List<List<String>> result, {sort=true}){

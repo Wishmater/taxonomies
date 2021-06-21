@@ -6,6 +6,7 @@ import 'package:taxonomies/controllers/database_controller.dart';
 import 'package:taxonomies/models/category.dart';
 import 'package:taxonomies/models/instance.dart';
 import 'package:flutter/foundation.dart' as foundation;
+import 'package:taxonomies/pages/search/page_qr_scanner.dart';
 import 'package:taxonomies/widgets/ad_overlay.dart';
 import 'package:taxonomies/widgets/instance_card.dart';
 import 'package:dartx/dartx.dart';
@@ -19,8 +20,9 @@ class PageSearch extends PageFromZero {
 
   final Category? initialCategory;
   final List<Instance>? initialInstances;
+  final String? initialQuery;
 
-  PageSearch(this.initialCategory, this.initialInstances);
+  PageSearch(this.initialCategory, this.initialInstances, this.initialQuery,);
 
   @override
   _PageSearchState createState() => _PageSearchState();
@@ -29,7 +31,7 @@ class PageSearch extends PageFromZero {
 
 class _PageSearchState extends State<PageSearch> {
 
-  ScrollController mainScrollController = ScrollController();
+  late ScrollController mainScrollController;
   late Future<List<Category>> categories;
   late List<Instance> instances;
   Category? filterCategory;
@@ -39,10 +41,12 @@ class _PageSearchState extends State<PageSearch> {
 
   @override
   void initState() {
+    filterQuery = QrPage.lastResult ?? widget.initialQuery;
+    QrPage.lastResult = null;
     filterCategory = widget.initialCategory;
     instances = widget.initialInstances ?? [];
     categories = Category.getCategories();
-    if (instances==null){
+    if (widget.initialInstances==null){
       fetchInstances();
     }
     super.initState();
@@ -62,6 +66,7 @@ class _PageSearchState extends State<PageSearch> {
 
   @override
   Widget build(BuildContext context) {
+    mainScrollController = ScrollController();
     AppbarAction searchAction = AppbarAction(
       title: "Buscar",
       icon: Hero(
@@ -194,15 +199,45 @@ class _PageSearchState extends State<PageSearch> {
         body: _getPage(context),
         currentPage: widget,
         mainScrollController: mainScrollController,
-        appbarType: foundation.kIsWeb||Platform.isIOS||Platform.isAndroid
+        appbarType: PlatformExtended.isMobile
             ? ScaffoldFromZero.appbarTypeQuickReturn : ScaffoldFromZero.appbarTypeStatic,
         initialExpandedAction: filterCategory==null ? searchAction : null,
         actions: [
           searchAction,
+          if (!foundation.kIsWeb && Platform.isAndroid)
+            AppbarAction(
+              title: "Escanear QR",
+              icon: Icon(Icons.settings_overscan),
+              onTap: (context) => Navigator.of(context).pushNamed('/scan'),
+            ),
+          if (DatabaseController.searchableMapAttributeNames.isNotEmpty)
+            AppbarAction(
+              title: "Buscar en un Mapa",
+              icon: Icon(Icons.map),
+              onTap: (context) => Navigator.of(context).pushNamed('/map_search'),
+              breakpoints: {
+                0: ActionState.overflow,
+                ScaffoldFromZero.screenSizeLarge: ActionState.icon,
+              },
+            ),
+          if (!foundation.kIsWeb && Platform.isAndroid)
+            AppbarAction(
+              title: "Buscar en mi Área",
+              icon: Icon(Icons.location_on),
+              onTap: (context) => Navigator.of(context).pushNamed('/map_search?current=true'),
+              breakpoints: {
+                0: ActionState.overflow,
+                ScaffoldFromZero.screenSizeLarge: ActionState.icon,
+              },
+            ),
           AppbarAction(
             title: "Opciones",
             icon: Icon(Icons.settings),
             onTap: (context) => Navigator.of(context).pushNamed('/settings'),
+            breakpoints: {
+              0: ActionState.overflow,
+              ScaffoldFromZero.screenSizeLarge: ActionState.icon,
+            },
           ),
         ],
       ),
@@ -212,8 +247,8 @@ class _PageSearchState extends State<PageSearch> {
   Widget _getPage(BuildContext context){
     return LayoutBuilder(
       builder: (context, constraints) {
-        double maxWidth = 256;
-        double minWidth = 224;
+        double maxWidth = 320;
+        double minWidth = 256;
         int crossAxisCount = (constraints.maxWidth/minWidth).floor();
         double padding = (constraints.maxWidth - maxWidth*crossAxisCount).coerceIn(0, double.infinity);
         return CustomScrollView(

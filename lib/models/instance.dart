@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:taxonomies/controllers/database_controller.dart';
+import 'package:taxonomies/main.dart';
 import 'package:taxonomies/models/attribute.dart';
 import 'package:taxonomies/models/category.dart';
 
@@ -31,7 +33,7 @@ class Instance {
     for (var i = 0; i < embedded.length; ++i) {
       embedded[i].sortByDefault = false;
       final attributes = await embedded[i].getAttributes(sort: false);
-      final attribute = attributes.firstWhere((element) => element.typeName=='Imagen' || element.typeName=='Audio');
+      final attribute = attributes.firstWhere((element) => element.typeName=='Imagen' || element.typeName=='Audio' || element.typeName=='Video');
       value.add(attribute.copyWith(
         link: embedded[i],
       ));
@@ -139,7 +141,20 @@ class Instance {
       instances[i].extra = result[i][4];
     }
     return instances;
+  }
 
+  static Future<List<Instance>> getAll() async{
+    List<List<String>> result = [];
+    try {
+      result = await DatabaseController.executeQuery("select Instance.instance_id, value, Category.category_id, category_name from Instance_Attribute" +
+          " join Attribute on Instance_Attribute.attribute_id=Attribute.attribute_id" +
+          " join Instance on Instance.instance_id=Instance_Attribute.instance_id" +
+          " join Category on Instance.category_id=Category.category_id" +
+          " where attribute_name='Nombre'");
+    } catch (e, st) {
+      print(e); print(st);
+    }
+    return getInstancesfromQueryResult(result);
   }
 
   static Future<List<Instance>> getSearchResults(String? query) async{
@@ -156,7 +171,6 @@ class Instance {
       }
     }
     return getInstancesfromQueryResult(result);
-
   }
 
   static List<Instance> getInstancesfromQueryResult(List<List<String>> result){
@@ -193,11 +207,11 @@ class Instance {
     }
     return futureFirstImage;
   }
-  Future<String> _getFirstImage([int? instance_id]) async{
+  Future<String?> _getFirstImage([int? instance_id]) async{
     if (instance_id==null) instance_id=id;
 
-//    //Tiempo del sistema al iniciar el algoritmo
-//    long time = System.currentTimeMillis();
+   //Tiempo del sistema al iniciar el algoritmo
+    final time = DateTime.now().millisecond;
 
     //Inicializar las listas de nodos por expandir y ya revisados, para evitar ciclos
     String? result;
@@ -246,8 +260,9 @@ class Instance {
 
       } while (result==null && nodes.length>0);
 
-//      //Imprimir tiempo que demoró en terminar el algoritmo
-//      System.out.println("First Image for id "+instance_id+" found in "+(System.currentTimeMillis()-time)+" ms.");
+     //Imprimir tiempo que demoró en terminar el algoritmo
+     // logFileWrite.writeln("First Image for id "+instance_id.toString()+" found in "
+     //     +(DateTime.now().millisecond-time).toString()+" ms.");
 
       return Future.value(result);
 
@@ -269,5 +284,41 @@ class Instance {
     }
     return result;
   }
+
+
+  Future<List<Instance>> getRelativesOfCategory({
+    required String category,
+  }) async {
+    return [...(await getParentsOfCategory(category: category)), ...(await getSonsOfCategory(category: category))];
+  }
+  Future<List<Instance>> getParentsOfCategory({
+    required String category,
+  }) async {
+    List<Instance> result = [];
+    List<Instance> stack = [];
+    stack.addAll(await getParents());
+    for (var i = 0; i < stack.length; ++i) {
+      if (stack[i].category.name==category) {
+        result.add(stack[i]);
+      }
+      stack.addAll(await stack[i].getParents());
+    }
+    return result;
+  }
+  Future<List<Instance>> getSonsOfCategory({
+    required String category,
+  }) async {
+    List<Instance> result = [];
+    List<Instance> stack = [];
+    stack.addAll(await getSons(true));
+    for (var i = 0; i < stack.length; ++i) {
+      if (stack[i].category.name==category) {
+        result.add(stack[i]);
+      }
+      stack.addAll(await stack[i].getSons(true));
+    }
+    return result;
+  }
+
 
 }

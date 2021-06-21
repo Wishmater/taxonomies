@@ -73,9 +73,9 @@ class Migration{
 
     await insertInstance(15, 'media',
       attributeIds: [1, 7, 5, 8],
-      attributeOldNames: ['SIN_NOMBRE', 'ubicacion', 'fecha', 'localizacion'],
-      categoryIdGetter: (e) => e['tipo']=='audio' ? 16 : 15,
-      attributeIdsGetter: (e) => e['tipo']=='audio' ? [1, 7, 5, 8] : [1, 6, 5, 8],
+      attributeOldNames: ['SIN_NOMBRE', 'ubicacion', 'fecha', 'POINT'],
+      categoryIdGetter: (e) => e['tipo']=='audio' ? 16 : e['tipo']=='video' ? 19 : 15,
+      attributeIdsGetter: (e) => e['tipo']=='audio' ? [1, 7, 5, 8] : e['tipo']=='video' ? [1, 11, 5, 8] : [1, 6, 5, 8],
       relationOldNames: ['autor', 'licencia'],
     );
 
@@ -121,8 +121,8 @@ class Migration{
     );
 
     await insertInstance(8, 'especie',
-      attributeIds: [1, 2, 3, 9, 10],
-      attributeOldNames: ['nombre_especie', 'desc_especie', 'cient_especie', 'nidificacion', 'dimorfismo'],
+      attributeIds: [1, 2, 3, 9, 10, 8],
+      attributeOldNames: ['nombre_especie', 'desc_especie', 'cient_especie', 'nidificacion', 'dimorfismo', 'UBICACION'],
       relationOldNames: ['genero', 'endemismo', 'abundancia'],
     );
 
@@ -154,16 +154,23 @@ class Migration{
       if (attributeIdsGetter!=null) attributeIds = attributeIdsGetter(e);
       to.runInsert('insert into Instance values ($instanceIdCount, $categoryId)', []);
       if (e.containsKey(oldIdName)){
-        idMappings[e[oldIdName]] = instanceIdCount;
+        idMappings[e[oldIdName] as int] = instanceIdCount;
       }
       for (var i = 0; i < attributeIds.length; ++i) {
         dynamic value = e[attributeOldNames[i]] ?? '';
         if (attributeIds[i]==5) value = intl.DateFormat('dd/MM/yyy').format(DateTime.fromMillisecondsSinceEpoch(value));
         if (attributeOldNames[i]=='dimorfismo') value = value==1 ? 'Sí - Hay Diferencias apreciables entre macho y hembra' : 'No - No hay Diferencias apreciables entre macho y hembra';
-        if (attributeOldNames[i]=='SIN_NOMBRE') {
-          final especie = await from.runSelect('select * from especie join especie_media on especie.id_especie=especie_media.id_especie where id_media=${e['id_media']}', []);
-          value = (e['tipo']=='audio' ? 'Sonido de ' : 'Foto de ') + especie[0]['nombre_especie'];
+        if (attributeOldNames[i]=='POINT') {
+          value = 'POINT(${e['latitud']} ${e['longitud']})';
         }
+        if (attributeOldNames[i]=='UBICACION') {
+          value = (await from.runSelect('select * from distribucion where especie_id=${e['id_especie']}', []))[0]['geometria'] ?? '';
+        }
+        // ADD A CUSTOM NAME FOR MEDIA
+        // if (attributeOldNames[i]=='SIN_NOMBRE') {
+        //   // final especie = await from.runSelect('select * from especie join especie_media on especie.id_especie=especie_media.id_especie where id_media=${e['id_media']}', []);
+        //   // value = (e['tipo']=='audio' ? 'Sonido de ' : e['tipo']=='video' ? 'Video de ' : 'Foto de ') + especie[0]['nombre_especie'].toString();
+        // }
         to.runInsert("insert into Instance_Attribute values ($instanceAttributeIdCount, '$value', $instanceIdCount, ${attributeIds[i]})", []);
         instanceAttributeIdCount++;
       }

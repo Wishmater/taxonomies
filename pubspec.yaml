@@ -29,19 +29,23 @@ dependencies:
     path: ../from_zero_ui/
 
   # * Language Extensions
-  dartx: ^0.5.0
-  dio: ^3.0.10
-  dio_retry: ^0.1.9-beta
+  dartx: 0.7.0
+  dio: 3.0.10
+  dio_retry: 0.1.9-beta
+  poly: ^1.0.7+2
 
   # * State Management
-  provider: ^4.3.2+3
-  hive: ^1.4.4+1
-  hive_flutter: ^0.3.1
+  provider: 5.0.0
+  hive: 2.0.0
+  hive_flutter: 1.0.0
 
   # * Widgets / UI
-  flutter_icons: ^1.1.0
-  animations: ^1.1.2
-  auto_size_text: ^2.1.0
+  flutter_icons: 1.1.0
+  animations: 2.0.0
+  auto_size_text: 2.1.0
+  extended_tabs: any
+  flutter_typeahead: 3.1.3
+  flutter_svg: ^0.22.0
 #  flutter_map: ^0.10.1+1
 #  user_location:
 #    git:
@@ -50,20 +54,30 @@ dependencies:
 
   # * Plugins
 #  archive: ^2.0.13
-  url_launcher: ^5.7.10
-  path_provider: ^1.6.24
-  moor: ^3.4.0
-  moor_ffi: ^0.8.0
-  sqlite3_flutter_libs: ^0.2.0
+  url_launcher: 6.0.2
+  path_provider: 2.0.1
+  moor: 4.1.0
+  moor_ffi: 0.8.0
+  shared_preferences: 2.0.6
+  sqlite3_flutter_libs: 0.4.0+1
 #  audioplayer: ^0.8.1
 #  audioplayer_web: ^0.7.1
-  assets_audio_player: ^2.0.13+1
-  flutter_audio_desktop: ^0.0.8
-  video_player: ^1.0.1
-  video_player_web: ^0.1.4+1
-  chewie: ^0.12.0
+  assets_audio_player: 2.0.13+1
+  flutter_audio_desktop: 0.0.8
+  video_player: 1.0.1
+  video_player_web: 0.1.4+1
+  chewie: 0.12.0
+  downloads_path_provider: 0.1.0
+  permission_handler: 6.1.0
+  qr_code_scanner: 0.3.0
+  open_file: 3.2.1
+  location: 4.1.1
+  uni_links: 0.5.1
+  image: 3.0.2
+  clipboard: 0.1.3
+  share_plus: 2.1.2
 
-  utf: ^0.9.0+5
+  utf: 0.9.0+5
 
   # ! temporal fde dependencies until official desktop support is stable
   window_size:
@@ -75,12 +89,18 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_launcher_icons: ^0.7.5
 
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/logo.png"
+dependency_overrides:
+  http: 0.13.0
+  http_parser: 4.0.0
+  crypto: 3.0.0
+  path_provider: 2.0.1
+  sqlite3_flutter_libs: 0.4.0+1
+  moor: 4.1.0
+  ffi: 1.0.0
+  convert: 3.0.0
+  xml: ^5.0.0
+  path_parsing: ^0.2.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -129,9 +149,16 @@ flutter:
     - assets/audios/
     - assets/pictures/
     - assets/videos/
-    - assets/ads/
-    - assets/audio/
-    - assets/image/
-    - assets/icon/
-    - assets/map/
-    - assets/video/
+#    - assets/ads/
+#    - assets/audio/
+#    - assets/image/
+#    - assets/map/
+#    - assets/video/
+    - assets/games/
+#    - assets/icon/
+#    - assets/icon/abundance/
+#    - assets/icon/activity/
+#    - assets/icon/conserv/
+#    - assets/icon/diet/
+#    - assets/icon/habitat/
+#    - assets/icon/new/
